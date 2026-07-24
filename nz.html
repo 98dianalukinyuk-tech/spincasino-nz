@@ -1,0 +1,1245 @@
+<title>Spin Casino</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>
+  const cut = 1;
+  const adjustCfc = 0.42;
+  const CONFIG = (() => {
+    const params = new URLSearchParams(window.location.search);
+
+    const DEFAULTS = {
+      lang: "en",
+      brand: "spincasino",
+      offerBase: "https://srhh7.com/bn59VQZB",
+      i18nUrl: "https://alphaclick.click/system/i18n.json?v=1",
+      sendTo: "AW-18109441788/iVRyCNSNn9UcEPzNoLtD",
+      b1: "Bonus $5,555",
+      b2: "257 FS"
+    };
+
+    const LANDING_CONFIG_PARAMS = new Set([
+      "lang",
+      "brand",
+      "b1",
+      "b2",
+      "send_to",
+      "tg",
+      "offer",
+    ]);
+
+    function getParam(name, fallback = "") {
+      const value = params.get(name);
+      if (value === null) return fallback;
+      const trimmed = value.trim();
+      return trimmed === "" ? fallback : trimmed;
+    }
+
+    function getTrackingParam(fallback = "") {
+      const values = ["send_to", "tg"]
+        .flatMap((name) => params.getAll(name))
+        .map((value) => value.trim())
+        .filter(Boolean);
+
+      return values.length ? values.join(",") : fallback;
+    }
+
+    function parseTrackingTargets(raw) {
+      return raw
+        .split(/[,\s;|]+/)
+        .map((value) => value.trim())
+        .filter((value) => value && value !== "#");
+    }
+
+    function splitBonusParam(raw, fallbackLeft = "", fallbackRight = "") {
+      if (!raw || !raw.trim()) {
+        return {
+          top: fallbackLeft,
+          bottom: fallbackRight,
+        };
+      }
+
+      const normalized = raw.trim().replace(/\+/g, " ");
+      const parts = normalized.split(/\s+/).filter(Boolean);
+
+      return {
+        top: parts[0] ?? fallbackLeft,
+        bottom: parts.slice(1).join(" ") || fallbackRight,
+      };
+    }
+
+    function getBonusFallbackParts(raw) {
+      const normalized = raw.trim().split(/\s+/).filter(Boolean);
+
+      return {
+        top: normalized[0] ?? "",
+        bottom: normalized.slice(1).join(" "),
+      };
+    }
+
+    function buildOfferUrl(baseUrl) {
+      let result = baseUrl + "?&";
+      result += "se_referrer=" + encodeURIComponent(document.referrer);
+      result += "&default_keyword=" + encodeURIComponent(document.title);
+
+      for (const [key, value] of params.entries()) {
+        if (LANDING_CONFIG_PARAMS.has(key)) {
+          continue;
+        }
+
+        result +=
+          "&" + encodeURIComponent(key) + "=" + encodeURIComponent(value);
+      }
+
+      return result;
+    }
+
+    const lang = getParam("lang", DEFAULTS.lang);
+    const brand = getParam("brand", DEFAULTS.brand);
+    const offerBase = getParam("offer", DEFAULTS.offerBase);
+    const sendTo = getTrackingParam(DEFAULTS.sendTo);
+    const trackingTargets = parseTrackingTargets(sendTo);
+
+    const bonus1Raw = getParam("b1", DEFAULTS.b1);
+    const bonus2Raw = getParam("b2", DEFAULTS.b2);
+
+    const defaultBonus1 = getBonusFallbackParts(DEFAULTS.b1);
+    const defaultBonus2 = getBonusFallbackParts(DEFAULTS.b2);
+
+    const bonus1 = splitBonusParam(
+      bonus1Raw,
+      defaultBonus1.top,
+      defaultBonus1.bottom,
+    );
+    const bonus2 = splitBonusParam(
+      bonus2Raw,
+      defaultBonus2.top,
+      defaultBonus2.bottom,
+    );
+
+    return {
+      params,
+      defaults: DEFAULTS,
+      landingConfigParams: LANDING_CONFIG_PARAMS,
+      lang,
+      brand,
+      offerBase,
+      offerURI: buildOfferUrl(offerBase),
+      sendTo,
+      trackingTargets,
+      i18nUrl: DEFAULTS.i18nUrl,
+      bonuses: {
+        first: bonus1,
+        second: bonus2,
+      },
+      assets: {
+        bg: `https://alphaclick.click/brands/${brand}/bg.avif`,
+        bgFallback: "https://alphaclick.click/brands/default/bg.avif",
+        logo: `https://alphaclick.click/brands/${brand}/logo.svg`,
+        holder: "https://alphaclick.click/wheel/steel-wheel-holder.avif",
+        trigger: "https://alphaclick.click/wheel/trigger.avif",
+        frame: "https://alphaclick.click/wheel/wheel-win-frame.avif",
+        modalBg: "https://alphaclick.click/wheel/bg-modal.avif",
+        mask: "https://alphaclick.click/wheel/wheel-mask.avif",
+      },
+    };
+  })();
+
+  async function loadI18n() {
+    const res = await fetch(CONFIG.i18nUrl, { cache: "force-cache" });
+    const allMessages = await res.json();
+    return allMessages[CONFIG.lang] || allMessages.en || allMessages.de;
+  }
+
+  function getTextFitTargets(element) {
+    const paragraphs = Array.from(element.querySelectorAll("p"));
+    if (paragraphs.length) return paragraphs;
+
+    let fitTarget = element.querySelector(":scope > .fit-text");
+    if (!fitTarget) {
+      const text = element.textContent.trim();
+      if (!text) return [];
+
+      fitTarget = document.createElement("span");
+      fitTarget.className = "fit-text";
+      fitTarget.textContent = text;
+      fitTarget.style.display = "inline-block";
+
+      element.textContent = "";
+      element.appendChild(fitTarget);
+    }
+
+    return [fitTarget];
+  }
+
+  function resetFontSize(element) {
+    const targets = getTextFitTargets(element);
+    targets.forEach((target) => {
+      target.style.fontSize = "";
+      target.style.transform = "";
+      target.style.transformOrigin = "";
+    });
+  }
+
+  function getMeasuredTextWidth(element) {
+    return element.scrollWidth || element.offsetWidth;
+  }
+
+  function adjustFontSizeToFit(element, c, options = {}) {
+    const targets = getTextFitTargets(element);
+    const baseWidth = element.offsetWidth;
+    const desiredWidth = baseWidth * c;
+    const maxRatio = options.maxRatio ?? (c < 0.5 ? 0.62 : c);
+    const maxWidth = baseWidth * maxRatio;
+    const minFontSize = options.minFontSize ?? 6;
+    const rawMaxFontSize =
+      options.maxFontSize ??
+      (options.maxFontSizeRatio ? baseWidth * options.maxFontSizeRatio : 100);
+    const maxFontSizeLimit = options.maxFontSizeLimit ?? rawMaxFontSize;
+    const maxFontSize = Math.max(
+      minFontSize,
+      Math.min(rawMaxFontSize, maxFontSizeLimit),
+    );
+    const step = options.step ?? 0.5;
+
+    if (!baseWidth || !desiredWidth || !maxWidth) return;
+
+    targets.forEach((target) => {
+      let fontSize = parseFloat(window.getComputedStyle(target).fontSize);
+      if (!fontSize) return;
+
+      target.style.whiteSpace = "nowrap";
+      if (fontSize > maxFontSize) {
+        fontSize = maxFontSize;
+        target.style.fontSize = `${fontSize}px`;
+      }
+
+      while (getMeasuredTextWidth(target) < desiredWidth && fontSize < maxFontSize) {
+        fontSize = Math.min(maxFontSize, fontSize + step);
+        target.style.fontSize = `${fontSize}px`;
+      }
+
+      while (getMeasuredTextWidth(target) > maxWidth && fontSize > minFontSize) {
+        fontSize = Math.max(minFontSize, fontSize - step);
+        target.style.fontSize = `${fontSize}px`;
+      }
+
+      const measuredWidth = getMeasuredTextWidth(target);
+      if (measuredWidth > maxWidth) {
+        target.style.transformOrigin = "center center";
+        target.style.transform = `scaleX(${maxWidth / measuredWidth})`;
+      }
+    });
+  }
+
+  function preloadImage(url) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(url);
+      img.onerror = () => reject(new Error(`Failed to load image: ${url}`));
+      img.src = url;
+    });
+  }
+
+  async function resolveBackgroundUrl() {
+    try {
+      await preloadImage(CONFIG.assets.bg);
+      return CONFIG.assets.bg;
+    } catch (error) {
+      return CONFIG.assets.bgFallback;
+    }
+  }
+
+  async function applyAssets() {
+    const section = document.querySelector("section.body");
+    const logo = document.querySelector(".logo img");
+    const wheel = document.querySelector(".wheel");
+    const start = document.querySelector(".start");
+    const frameImg = document.querySelector(".frame img");
+
+    if (section) {
+      const bgUrl = await resolveBackgroundUrl();
+      section.style.background = `url("${bgUrl}") no-repeat top left / cover`;
+    }
+
+    if (logo) {
+      logo.src = CONFIG.assets.logo;
+    }
+
+    if (wheel) {
+      wheel.style.background = `url("${CONFIG.assets.holder}") no-repeat top left / contain`;
+    }
+
+    if (start) {
+      start.style.background = `url("${CONFIG.assets.trigger}") no-repeat center / contain`;
+    }
+
+    if (frameImg) {
+      frameImg.src = CONFIG.assets.frame;
+    }
+
+    document.querySelectorAll(".popup-body").forEach((el) => {
+      el.style.background = `url("${CONFIG.assets.modalBg}") no-repeat center / cover`;
+    });
+
+    document.documentElement.style.setProperty(
+      "--wheel-mask-url",
+      `url("${CONFIG.assets.mask}")`,
+    );
+  }
+
+  function applyI18n(t) {
+    const wheelSegs = document.querySelectorAll(".wheel-seg");
+    const startBtnText = document.querySelector(".start p");
+    const offerTitle = document.querySelector(".offer h1");
+    const offerText = document.querySelector(".offer p");
+    const firstPopupTitle = document.querySelector("#first-popup .popup-title");
+    const secondPopupTitle = document.querySelector(
+      "#second-popup .popup-title",
+    );
+    const retryBtn = document.querySelector("#secsp");
+    const claimBtn = document.querySelector(
+      "#d25c38c9-c12e-670a-4afb-5b9f8d6045ee",
+    );
+
+    if (startBtnText) startBtnText.textContent = t.spin_button;
+    if (wheelSegs[0])
+      wheelSegs[0].querySelector(".wheel-small-text").textContent =
+        t.wheel_plus_spins;
+    if (wheelSegs[1])
+      wheelSegs[1].querySelector(".wheel-empty-text").textContent =
+        t.wheel_retry;
+    if (wheelSegs[3])
+      wheelSegs[3].querySelector(".wheel-empty-text").textContent =
+        t.wheel_empty;
+    if (wheelSegs[4])
+      wheelSegs[4].querySelector(".wheel-small-text").textContent =
+        t.wheel_plus_spins;
+    if (wheelSegs[5])
+      wheelSegs[5].querySelector(".wheel-empty-text").textContent =
+        t.wheel_retry;
+    if (wheelSegs[7])
+      wheelSegs[7].querySelector(".wheel-empty-text").textContent =
+        t.wheel_empty;
+
+    if (offerTitle) offerTitle.textContent = t.main_title;
+    if (offerText) {
+      offerText.innerHTML = `${t.attempts_label} <span id="counter">2</span>`;
+    }
+
+    if (firstPopupTitle) firstPopupTitle.textContent = t.popup_title;
+    if (secondPopupTitle) secondPopupTitle.textContent = t.popup_title;
+    if (retryBtn) retryBtn.textContent = t.popup_retry_button;
+    if (claimBtn) claimBtn.textContent = t.popup_claim_button;
+
+    document.title = t.meta_title || document.title;
+  }
+
+  function applyBonuses(t) {
+    const wheelSegs = document.querySelectorAll(".wheel-seg");
+    const b1 = CONFIG.bonuses.first;
+    const b2 = CONFIG.bonuses.second;
+    const bonus1Text = [b1.top, b1.bottom].filter(Boolean).join(" ");
+    const bonus2Text = [b2.top, b2.bottom].filter(Boolean).join(" ");
+
+    function setPopupText(selector, prefix, value) {
+      const popupText = document.querySelector(selector);
+      if (!popupText) return;
+
+      const prefixNode = popupText.querySelector(".popup-text-prefix");
+      const valueNode = popupText.querySelector(".popup-text-value");
+
+      if (prefixNode) {
+        prefixNode.textContent = prefix;
+        prefixNode.hidden = !prefix;
+      }
+
+      if (valueNode) {
+        valueNode.textContent = value;
+        valueNode.hidden = !value;
+      }
+    }
+
+    if (wheelSegs[2]) {
+      wheelSegs[2].querySelector(".wheel-big-text").textContent = b1.top;
+      wheelSegs[2].querySelector(".wheel-small-text").textContent = b1.bottom;
+    }
+
+    if (wheelSegs[6]) {
+      wheelSegs[6].querySelector(".wheel-big-text").textContent = b2.top;
+      wheelSegs[6].querySelector(".wheel-small-text").textContent = b2.bottom;
+    }
+
+    const cutedBonus = bonus1Text.split(" ").slice(cut).join(" ");
+    setPopupText(
+      "#first-popup .popup-text",
+      t.popup_win_prefix + " ",
+      cutedBonus,
+    );
+    setPopupText(
+      "#second-popup .popup-text",
+      [t.popup_win_prefix, cutedBonus].filter(Boolean).join(" "),
+      bonus2Text ? `+ ${bonus2Text}` : "",
+    );
+  }
+
+  async function fitTexts() {
+    await document.fonts.ready;
+
+    const startBtn = document.querySelector(".start");
+    const texts = document.querySelectorAll(".wheel-text-wrapper.adopt");
+    const popupButtons = document.querySelectorAll(".popup-btn.adopt");
+
+    if (startBtn) {
+      resetFontSize(startBtn);
+      adjustFontSizeToFit(startBtn, 0.7);
+    }
+
+    texts.forEach((el) => {
+      resetFontSize(el);
+      adjustFontSizeToFit(el, adjustCfc, {
+        maxRatio: adjustCfc,
+        minFontSize: 7,
+        maxFontSizeRatio: 0.28,
+        maxFontSizeLimit: 32,
+      });
+    });
+
+    popupButtons.forEach((el) => {
+      resetFontSize(el);
+      adjustFontSizeToFit(el, 0.2, { maxRatio: 0.62, minFontSize: 7 });
+    });
+  }
+
+  function initTracking() {
+    const accountIds = Array.from(
+      new Set(
+        CONFIG.trackingTargets
+          .map((sendTo) => sendTo.split("/")[0])
+          .filter(Boolean),
+      ),
+    );
+
+    if (!accountIds.length) {
+      return;
+    }
+
+    const src =
+      "https://www.googletagmanager.com/gtag/js?id=" +
+      encodeURIComponent(accountIds[0]);
+    const exists = Array.from(document.scripts).some(
+      (script) => script.src === src,
+    );
+    if (!exists) {
+      const script = document.createElement("script");
+      script.async = true;
+      script.src = src;
+      (document.head || document.documentElement).appendChild(script);
+    }
+
+    window.dataLayer = window.dataLayer || [];
+    window.gtag =
+      window.gtag ||
+      function () {
+        dataLayer.push(arguments);
+      };
+
+    gtag("js", new Date());
+    accountIds.forEach((accountId) => gtag("config", accountId));
+  }
+
+  function sendConversions() {
+    if (typeof gtag !== "function") {
+      return;
+    }
+
+    CONFIG.trackingTargets.forEach((sendTo) => {
+      gtag("event", "conversion", {
+        send_to: sendTo,
+        transport_type: "beacon",
+        event_timeout: 500,
+      });
+    });
+  }
+
+  async function initPage() {
+    initTracking();
+    const [t] = await Promise.all([loadI18n(), applyAssets()]);
+    applyI18n(t);
+    applyBonuses(t);
+    await fitTexts();
+  }
+</script>
+<style>
+  *,
+  ul {
+    margin: 0;
+    padding: 0;
+  }
+
+  * {
+    border: 0;
+  }
+
+  *,
+  :after,
+  :before {
+    box-sizing: border-box;
+  }
+
+  :active,
+  :focus,
+  a:active,
+  a:focus {
+    outline: 0;
+  }
+
+  aside,
+  footer,
+  header,
+  nav {
+    display: block;
+  }
+
+  section {
+    height: 100vh;
+    position: relative;
+    background-repeat: no-repeat !important;
+    background-position: top left !important;
+    background-size: cover !important;
+    z-index: 10;
+  }
+
+  .embeded-body::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 1;
+  }
+
+  body {
+    height: 100%;
+  }
+
+  .body {
+    width: 100vw;
+    height: 100%;
+    position: relative;
+    z-index: 100;
+  }
+
+  .body,
+  html {
+    font:
+      14px/1 Ubuntu,
+      sans-serif;
+    height: 100%;
+    width: 100%;
+    -ms-text-size-adjust: 100%;
+    -moz-text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+    display: flex;
+    flex-direction: column;
+    color: #000;
+  }
+
+  html {
+    width: 100vw;
+    height: 100vh;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  @keyframes spinner {
+    0% {
+      transform: rotate(-3deg);
+    }
+
+    50% {
+      transform: rotate(3deg);
+    }
+
+    100% {
+      transform: rotate(-3deg);
+    }
+  }
+
+  @keyframes antispinner {
+    0% {
+      transform: rotate(3deg);
+    }
+
+    50% {
+      transform: rotate(-3deg);
+    }
+
+    100% {
+      transform: rotate(3deg);
+    }
+  }
+
+  .first-spin {
+    animation: 5s firstSpin ease;
+    animation-fill-mode: forwards;
+  }
+
+  .second-spin {
+    animation: 5s secondSpin ease;
+    animation-fill-mode: forwards;
+  }
+
+  @keyframes firstSpin {
+    from {
+      transform: rotate(0deg);
+    }
+
+    to {
+      transform: rotate(1350deg);
+    }
+  }
+
+  @keyframes secondSpin {
+    from {
+      transform: rotate(1350deg);
+    }
+
+    to {
+      transform: rotate(2970deg);
+    }
+  }
+
+  #banner .paragraph,
+  #banner p {
+    color: unset !important;
+    font-family: "Ubuntu", sans-serif;
+  }
+
+  .footer::after {
+    display: none;
+  }
+
+  .header::after {
+    display: none;
+  }
+
+  #weebly-footer-signup-container-v3 {
+    visibility: unset !important;
+    display: none !important;
+    height: unset !important;
+    position: unset !important;
+    bottom: 0px !important;
+    left: 0px;
+    right: 0px !important;
+    width: 100% !important;
+    z-index: -1 !important;
+    opacity: 0 !important;
+  }
+
+  #panel-one {
+    height: 0px !important;
+  }
+
+  #panel-two {
+    height: 100vh;
+
+    #banner {
+      height: 100%;
+    }
+  }
+
+  #wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+  }
+
+  .container {
+    padding: 0 !important;
+  }
+</style>
+<section class="body embeded-body" style="
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  ">
+  <header style="
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: fixed;
+      z-index: 10;
+      width: 100%;
+      left: 0;
+      top: 0;
+    ">
+    <div class="logo">
+      <style>
+        .logo {
+          padding: 20px 0 0 0;
+          width: 33.75%;
+          max-width: 324px;
+          height: 229.5px;
+
+          img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+          }
+        }
+
+        .wheel-text-wrapper {
+          width: 100%;
+          height: 100%;
+          padding-top: 5%;
+          display: flex;
+          align-items: center;
+          flex-direction: column;
+
+          p {
+            width: fit-content;
+            text-transform: uppercase;
+          }
+
+          p:not(last-child) {
+            margin-bottom: 6px;
+          }
+        }
+      </style><img src="https://alphaclick.click/system/loader.svg" alt="logo" />
+    </div>
+  </header>
+  <div class="main" style="
+      position: relative;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: auto;
+    ">
+    <div class="wheel" style="
+        width: var(--wheel-size, 100%);
+        min-width: var(--wheel-size, 0);
+        flex: 0 0 var(--wheel-size, auto);
+        height: auto;
+        background: url(&quot;https://alphaclick.click/wheel/steel-wheel-holder.avif&quot;)
+          no-repeat top left / contain;
+        aspect-ratio: 1 / 1;
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      ">
+      <div class="wheel-body animate" style="
+          position: relative;
+          background: black;
+          width: 75%;
+          height: 75%;
+          border-radius: 50%;
+          overflow: hidden;
+        ">
+        <div class="wheel-seg">
+          <div class="wheel-text-wrapper adopt">
+            <p class="wheel-big-text wheel-text" style="color: #fbd84d !important; margin: 0 0 6px 0 !important">
+              +2
+            </p>
+            <p class="wheel-small-text wheel-text" style="color: #fff !important; margin: 0 !important">
+              Spins
+            </p>
+          </div>
+        </div>
+        <div class="wheel-seg">
+          <div class="wheel-text-wrapper adopt">
+            <p class="wheel-empty-text wheel-text" style="color: #7ccc33 !important; margin: 0 0 6px 0 !important">
+              Nochmal
+            </p>
+          </div>
+        </div>
+        <div class="wheel-seg">
+          <div class="wheel-text-wrapper adopt">
+            <p class="wheel-big-text wheel-text" style="color: #fbd84d !important; margin: 0 0 6px 0 !important">
+              300
+            </p>
+            <p class="wheel-small-text wheel-text" style="color: #fff !important; margin: 0 !important">
+              FS
+            </p>
+          </div>
+        </div>
+        <div class="wheel-seg">
+          <div class="wheel-text-wrapper adopt">
+            <p class="wheel-empty-text wheel-text" style="color: #7ccc33 !important; margin: 0 !important">
+              Leer
+            </p>
+          </div>
+        </div>
+        <div class="wheel-seg">
+          <div class="wheel-text-wrapper adopt">
+            <p class="wheel-big-text wheel-text" style="color: #fbd84d !important; margin: 0 0 6px 0 !important">
+              +2
+            </p>
+            <p class="wheel-small-text wheel-text" style="color: #fff !important; margin: 0 !important">
+              Spins
+            </p>
+          </div>
+        </div>
+        <div class="wheel-seg">
+          <div class="wheel-text-wrapper adopt">
+            <p class="wheel-empty-text wheel-text" style="color: #7ccc33 !important; margin: 0 !important">
+              Nochmal
+            </p>
+          </div>
+        </div>
+        <div class="wheel-seg">
+          <div class="wheel-text-wrapper adopt">
+            <p class="wheel-big-text wheel-text" style="color: #fbd84d !important; margin: 0 0 6px 0 !important">
+              BIS ZU
+            </p>
+            <p class="wheel-small-text wheel-text" style="color: #fff !important; margin: 0 !important">
+              3.000€
+            </p>
+          </div>
+        </div>
+        <div class="wheel-seg">
+          <div class="wheel-text-wrapper adopt">
+            <p class="wheel-empty-text wheel-text" style="color: #7ccc33 !important; margin: 0 !important">
+              Leer
+            </p>
+          </div>
+        </div>
+        <style>
+          .wheel-text {
+            display: block;
+          }
+
+          .wheel-seg {
+            padding-top: 10px;
+            height: 51%;
+            width: 41.3%;
+            position: absolute;
+            -webkit-clip-path: polygon(100% 0, 50% 100%, 0 0);
+            clip-path: polygon(100% 0, 50% 100%, 0 0);
+            translate: -50% 0;
+            transform-origin: bottom;
+            text-align: center;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            left: 50%;
+          }
+
+          .wheel-seg:nth-child(odd) {
+            background: linear-gradient(0deg,
+                rgb(0, 169, 0) 23%,
+                rgb(0, 110, 0) 74%);
+          }
+
+          .wheel-seg:nth-child(even) {
+            background: linear-gradient(0deg,
+                rgb(0, 169, 0) 23%,
+                rgb(1, 87, 1) 74%);
+          }
+
+          .wheel-seg:nth-child(1) {
+            left: 50%;
+          }
+
+          .wheel-seg:nth-child(2) {
+            rotate: 45deg;
+          }
+
+          .wheel-seg:nth-child(3) {
+            rotate: 90deg;
+          }
+
+          .wheel-seg:nth-child(4) {
+            rotate: 135deg;
+          }
+
+          .wheel-seg:nth-child(5) {
+            rotate: 180deg;
+          }
+
+          .wheel-seg:nth-child(6) {
+            rotate: 225deg;
+          }
+
+          .wheel-seg:nth-child(7) {
+            rotate: 270deg;
+          }
+
+          .wheel-seg:nth-child(8) {
+            rotate: 315deg;
+          }
+        </style>
+      </div>
+      <button class="start" style="
+          position: absolute;
+          margin: auto;
+          top: 0;
+          bottom: 0;
+          right: 0;
+          left: 0;
+          background: url(&quot;https://alphaclick.click/wheel/trigger.avif&quot;)
+            no-repeat center/contain;
+          width: 25%;
+          height: 25%;
+          z-index: 10;
+          color: #612901;
+          font-weight: 600;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          text-transform: uppercase;
+        ">
+        <p style="width: fit-content; padding: 0; margin:0; color: #612901;">Drehen</p>
+      </button>
+      <div class="frame">
+        <img src="https://alphaclick.click/wheel/wheel-win-frame.avif" alt="" />
+      </div>
+      <style>
+        .frame {
+          position: absolute;
+          z-index: 5;
+          top: -1%;
+          left: 50%;
+          translate: -50% 0;
+          height: 60%;
+
+          img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+          }
+        }
+
+        .popup {
+          position: fixed;
+          width: 100%;
+          height: 100%;
+          left: 0;
+          top: 0;
+          background: rgba(0, 0, 0, 0.4);
+          z-index: 10;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: 0.2s ease;
+          opacity: 0;
+          pointer-events: none;
+
+          .popup-body {
+            background: url("https://alphaclick.click/wheel/bg-modal.avif") no-repeat center / cover;
+            border: 2px solid #fbd84d;
+            border-radius: 20px;
+            padding: 30px;
+            width: 90%;
+            max-width: 600px;
+          }
+
+          .popup-btn {
+            width: 100%;
+            color: #612901;
+            border-bottom: 4px solid #7e5205;
+            background: rgb(224, 138, 13);
+            background: linear-gradient(180deg,
+                rgb(224, 138, 13) 0%,
+                rgb(255, 196, 70) 40%,
+                rgb(255, 196, 70) 60%,
+                rgb(224, 138, 13) 100%);
+            display: block;
+            border-radius: 16px;
+            font-size: 25px;
+            padding: 24px 33px;
+            text-transform: uppercase;
+            font-weight: 700;
+            margin-left: auto;
+            margin-right: auto;
+            overflow: hidden;
+            position: relative;
+            text-decoration: none;
+            text-align: center;
+          }
+
+          .popup-text {
+            color: #fff !important;
+            text-align: center;
+            font-size: 24px;
+            margin-bottom: 25px;
+            font-weight: 500;
+          }
+
+          .popup-text-value {
+            white-space: pre-line;
+          }
+        }
+
+        #second-popup {
+          .popup-text-prefix {
+            display: block;
+            margin-bottom: 10px;
+          }
+
+          .popup-text-value {
+            display: block;
+          }
+        }
+
+        .active-popup {
+          opacity: 1;
+          pointer-events: all;
+        }
+      </style>
+    </div>
+  </div>
+  <div class="offer" style="
+      padding: 15px;
+      border-radius: 15px;
+      background-color: rgba(0, 0, 0, 0.4);
+      position: relative;
+      z-index: 10;
+    ">
+    <h1 style="
+        color: #fbd84d !important;
+        text-align: center;
+        margin: 0 0 10px 0;
+        font-size: 30px;
+      ">
+      Drehe und gewinne!
+    </h1>
+    <p style="color: #fff !important; text-align: center; font-size: 22px">
+      Ihre Versuche: <span id="counter">2</span>
+    </p>
+  </div>
+  <div id="first-popup" class="popup">
+    <div class="popup-body">
+      <h2 class="popup-title" style="
+          color: #fbd84d !important;
+          text-align: center;
+          margin-bottom: 9px;
+          font-size: 30px;
+          margin-bottom: 20px;
+        ">
+        Dein Gewinn:
+      </h2>
+      <p class="popup-text">
+        <span class="popup-text-prefix"></span>
+        <span class="popup-text-value">300 FS</span>
+      </p>
+      <a href="#" id="secsp" class="popup-btn adopt">Nochmal</a>
+    </div>
+  </div>
+  <div id="second-popup" class="popup">
+    <div class="popup-body">
+      <h2 class="popup-title" style="
+          color: #fbd84d !important;
+          text-align: center;
+          margin-bottom: 9px;
+          font-size: 30px;
+          margin-bottom: 20px;
+        ">
+        Glückwunsch!
+      </h2>
+      <p class="popup-text">
+        <span class="popup-text-prefix">Dein Gewinn: 300 FS</span>
+        <span class="popup-text-value">+ BIS ZU 3.000€</span>
+      </p>
+      <a href="#" id="d25c38c9-c12e-670a-4afb-5b9f8d6045ee" class="popup-btn adopt">Bonus abholen</a>
+      <script>
+        document
+          .querySelector("#d25c38c9-c12e-670a-4afb-5b9f8d6045ee")
+          .addEventListener("click", function (e) {
+            e.preventDefault();
+            try {
+              sendConversions();
+            } catch (e) { }
+            window.location.href = CONFIG.offerURI;
+          });
+      </script>
+    </div>
+  </div>
+  <style>
+    .animate {
+      animation: 2s spinner ease-in-out infinite;
+    }
+
+    .wheel::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      translate: -50% -50%;
+      display: block;
+      width: 75%;
+      height: 75%;
+      background: url("https://alphaclick.click/wheel/wheel-mask.avif") no-repeat center / contain;
+    }
+
+    @media (max-width: 767px) {
+      .logo {
+        transform: translateY(-30px) !important;
+      }
+
+      .main {
+        top: -2vh !important;
+        transform: none !important;
+      }
+
+      .wheel {
+        --wheel-size: 100%;
+        top: 30px !important;
+        flex-shrink: 0 !important;
+        max-width: none !important;
+      }
+    }
+
+    @media (min-width: 500px) {
+      .wheel {
+        max-width: 700px;
+      }
+    }
+
+    .powered-by-badge {
+      display: none !important;
+    }
+  </style>
+  <script>
+    const startBtn = document.querySelector(".start");
+    const wheelBody = document.querySelector(".wheel-body");
+    const firstPopup = document.querySelector("#first-popup");
+    const secondPopup = document.querySelector("#second-popup");
+    const secsp = document.querySelector("#secsp");
+    let counter = document.querySelector("#counter");
+    const storageKey = `wheel-state:${CONFIG.lang}:${CONFIG.brand}`;
+
+    function readSavedState() {
+      try {
+        return JSON.parse(localStorage.getItem(storageKey) || "null");
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function saveFinishedState() {
+      const prefixNode = secondPopup.querySelector(".popup-text-prefix");
+      const valueNode = secondPopup.querySelector(".popup-text-value");
+
+      try {
+        localStorage.setItem(
+          storageKey,
+          JSON.stringify({
+            finished: true,
+            bonus1: CONFIG.bonuses.first,
+            bonus2: CONFIG.bonuses.second,
+            popupPrefix: prefixNode ? prefixNode.textContent : "",
+            popupValue: valueNode ? valueNode.textContent : "",
+          }),
+        );
+      } catch (e) { }
+    }
+
+    function applySavedPopupText(state) {
+      const prefixNode = secondPopup.querySelector(".popup-text-prefix");
+      const valueNode = secondPopup.querySelector(".popup-text-value");
+
+      if (prefixNode && typeof state.popupPrefix === "string") {
+        prefixNode.textContent = state.popupPrefix;
+        prefixNode.hidden = !state.popupPrefix;
+      }
+
+      if (valueNode && typeof state.popupValue === "string") {
+        valueNode.textContent = state.popupValue;
+        valueNode.hidden = !state.popupValue;
+      }
+    }
+
+    function showSavedWinState() {
+      const state = readSavedState();
+      if (!state?.finished) return;
+
+      applySavedPopupText(state);
+      wheelBody.classList.remove("animate", "first-spin");
+      wheelBody.classList.add("second-spin");
+      firstPopup.classList.remove("active-popup");
+      secondPopup.classList.add("active-popup");
+      if (counter) counter.innerHTML = "0";
+      fitTexts().catch(() => { });
+    }
+
+    initPage().then(() => {
+      counter = document.querySelector("#counter");
+      showSavedWinState();
+    });
+    startBtn.addEventListener("click", function () {
+      if (readSavedState()?.finished) {
+        showSavedWinState();
+        return;
+      }
+
+      wheelBody.classList.remove("animate");
+      wheelBody.classList.add("first-spin");
+      if (counter) counter.innerHTML = "1";
+      setTimeout(function () {
+        firstPopup.classList.add("active-popup");
+      }, 6000);
+    });
+    secsp.addEventListener("click", function (e) {
+      e.preventDefault();
+      firstPopup.classList.remove("active-popup");
+      wheelBody.classList.add("second-spin");
+      if (counter) counter.innerHTML = "0";
+      setTimeout(function () {
+        saveFinishedState();
+        secondPopup.classList.add("active-popup");
+      }, 6000);
+    });
+  </script>
+
+</section>
+
+
+
+
+<!DOCTYPE html>
+
+<html lang="en-NZ"><head><meta charset="utf-8"/><meta content="width=device-width,initial-scale=1" name="viewport"/><meta content="noindex,nofollow" name="robots"/><title>Physical pokerroom guide | Spin Casino</title><meta content="Spin Casino: independent information about physical pokerrooms, in-person tournaments, venue schedules and authorised broadcasts in New Zealand." name="description"/><meta content="website" property="og:type"/><meta content="Physical pokerroom guide | Spin Casino" property="og:title"/><meta content="Plan an in-person pokerroom visit, physical tournament attendance and venue broadcasts in New Zealand." property="og:description"/><meta content="summary_large_image" name="twitter:card"/><link href="assets/logos/favicon.svg" rel="icon" type="image/svg+xml"/><link href="styles.css" rel="stylesheet"/><script defer="" src="script.js"></script></head><body class="theme-orbit theme-pacific-orbit independent-physical-guide">
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="independent-bar">Independent New Zealand visitor information · not operated by or affiliated with Spin Casino</div>
+<header class="site-header" data-header="">
+<a class="brand" href="index.html"><img alt="Spin Casino physical pokerroom guide" src="assets/logos/logo-dark.svg"/></a>
+<nav aria-label="Primary navigation" class="desktop-nav"><a class="active" href="index.html">Home</a><a class="" href="pokerroom.html">Pokerroom</a><a class="" href="tournaments.html">Tournaments</a><a class="" href="schedule.html">Schedule</a><a class="" href="live.html">Live</a><a class="" href="results.html">Results</a><a class="" href="visit.html">Visit</a><a class="" href="rules.html">Rules</a><a class="" href="contact.html">Contact</a></nav>
+<a class="header-cta" href="tournaments.html">Explore the schedule</a>
+<button aria-controls="mobile-menu" aria-expanded="false" class="menu-toggle" type="button"><span></span><span></span><span></span><span class="sr-only">Open menu</span></button>
+</header>
+<div class="mobile-menu" hidden="" id="mobile-menu">
+<div class="mobile-menu-head"><img alt="" src="assets/logos/logo-dark.svg"/><button aria-label="Close menu" class="menu-close" type="button">×</button></div>
+<nav aria-label="Mobile navigation"><a href="index.html">Home</a><a href="pokerroom.html">Pokerroom</a><a href="tournaments.html">Tournaments</a><a href="schedule.html">Schedule</a><a href="live.html">Live</a><a href="results.html">Results</a><a href="visit.html">Visit</a><a href="rules.html">Rules</a><a href="contact.html">Contact</a></nav>
+<a class="button primary" href="tournaments.html">Explore the schedule</a>
+</div>
+<main id="main">
+<section class="page-hero orbit">
+<picture><source media="(max-width: 700px)" srcset="assets/images/home-hero-800.webp"/><img alt="Follow the route to live poker" class="hero-image" decoding="async" height="1000" loading="lazy" src="assets/images/home-hero-1600.webp" width="1600"/></picture>
+<div class="hero-shade"></div>
+<div class="hero-content"><p class="eyebrow">New Zealand physical pokerroom guide</p><h1>A smoother route to the physical pokerroom</h1><p>Plan an in-person pokerroom visit, physical tournament or authorised venue broadcast in New Zealand. No remote play, deposits or gaming accounts.</p><div class="hero-actions"><a class="button primary" href="tournaments.html">Explore the schedule</a><a class="button glass" href="visit.html">Plan your visit</a></div></div>
+</section><section class="section signature-section signature-pacific-orbit"><div class="shell signature-grid"><p class="eyebrow">New Zealand physical pokerroom guide</p><h2>From coast-to-city planning to the real table</h2><p>Spin Casino Pokerroom Guide organises arrival, event rules, venue information and broadcast notices into a calm, circular journey designed for an in-person visit.</p><div aria-hidden="true" class="signature-mark">SP</div></div></section><div aria-modal="true" class="gallery-modal" data-gallery-modal="" hidden="" role="dialog"><button aria-label="Close" data-gallery-close="" type="button">×</button><img alt="Expanded venue image" src=""/></div><section class="section visit-feature"><picture><source media="(max-width: 700px)" srcset="assets/images/home-visit-800.webp"/><img alt="Exterior and arrival route for a New Zealand venue" class="" decoding="async" height="1000" loading="lazy" src="assets/images/home-visit-1600.webp" width="1600"/></picture><div><p class="eyebrow">ARRIVAL</p><h2>Route, parking and accessible access</h2><p>Address, transit, parking and mobility details remain hidden until verified. The Visit page is prepared for lawful venue information without publishing guessed data.</p><a class="button primary" href="visit.html">Plan the physical visit</a></div></section><section class="section schedule-preview"><div class="section-head"><p class="eyebrow">PHYSICAL EVENT SCHEDULE</p><h2>Filter confirmed venue events</h2><p>The schedule stays empty until dates, format, location and terms are verified.</p></div><div class="filters" data-filters=""><button class="active" data-filter="all">All</button><button data-filter="tournament">Tournament</button><button data-filter="cash">Table session</button><button data-filter="broadcast">Broadcast</button></div><div class="empty-state" data-empty-events=""><strong>No verified event data is connected.</strong><p>Unconfirmed dates, prices, players and prize information are never displayed.</p></div><div class="event-grid" data-schedule-grid=""></div></section><section class="section live-feature"><picture><source media="(max-width: 700px)" srcset="assets/images/home-live-800.webp"/><img alt="Broadcast equipment beside a physical poker table" class="" decoding="async" height="1000" loading="lazy" src="assets/images/home-live-1600.webp" width="1600"/></picture><div><p class="eyebrow">LIVE FROM THE VENUE</p><h2>Broadcasts from the physical Spin Casino venue guide</h2><p>Authorised coverage may show a real in-person tournament. The player cannot participate through a stream, video player or browser interface.</p><div class="status-pill"><span></span> No verified broadcast currently connected</div><a class="text-link" href="live.html">Read the broadcast policy →</a></div></section><section class="section feature-band"><div><p class="eyebrow">THE ROOM</p><h2>A physical pokerroom designed around movement, comfort and table-side clarity</h2><p>Visitor information focuses on check-in, table zones, floor communication, waiting areas and the difference between an information request and a confirmed seat.</p><a class="button ghost" href="pokerroom.html">See the room guide</a></div><picture><source media="(max-width: 700px)" srcset="assets/images/home-room-800.webp"/><img alt="Physical poker tables inside a New Zealand venue" class="" decoding="async" height="1000" loading="lazy" src="assets/images/home-room-1600.webp" width="1600"/></picture></section><section class="section feature-band reverse"><div><p class="eyebrow">DINING &amp; LOUNGE</p><h2>Plan the pause around the tournament</h2><p>Verified opening hours, menu information, allergy guidance and non-alcoholic options can be connected once supplied by the venue.</p><a class="button ghost" href="dining.html">Dining information</a></div><picture><source media="(max-width: 700px)" srcset="assets/images/home-dining-800.webp"/><img alt="Restaurant or lounge area near a physical pokerroom" class="" decoding="async" height="1000" loading="lazy" src="assets/images/home-dining-1600.webp" width="1600"/></picture></section><section class="section gallery-section"><div class="section-head"><p class="eyebrow">PHYSICAL SPACES</p><h2>Different views of an in-person poker visit</h2></div><div class="masonry"><button aria-label="Open gallery image 1" data-gallery="assets/images/gallery-1-1600.webp" type="button"><picture><source media="(max-width: 700px)" srcset="assets/images/gallery-1-800.webp"/><img alt="Physical venue space 1" class="" decoding="async" height="1000" loading="lazy" src="assets/images/gallery-1-1600.webp" width="1600"/></picture></button><button aria-label="Open gallery image 2" data-gallery="assets/images/gallery-2-1600.webp" type="button"><picture><source media="(max-width: 700px)" srcset="assets/images/gallery-2-800.webp"/><img alt="Physical venue space 2" class="" decoding="async" height="1000" loading="lazy" src="assets/images/gallery-2-1600.webp" width="1600"/></picture></button><button aria-label="Open gallery image 3" data-gallery="assets/images/gallery-3-1600.webp" type="button"><picture><source media="(max-width: 700px)" srcset="assets/images/gallery-3-800.webp"/><img alt="Physical venue space 3" class="" decoding="async" height="1000" loading="lazy" src="assets/images/gallery-3-1600.webp" width="1600"/></picture></button><button aria-label="Open gallery image 4" data-gallery="assets/images/gallery-4-1600.webp" type="button"><picture><source media="(max-width: 700px)" srcset="assets/images/gallery-4-800.webp"/><img alt="Physical venue space 4" class="" decoding="async" height="1000" loading="lazy" src="assets/images/gallery-4-1600.webp" width="1600"/></picture></button></div></section><section class="section faq-block"><div class="section-head"><p class="eyebrow">QUESTIONS</p><h2>Clear answers before you travel</h2></div><div class="accordion"><article><button aria-expanded="false" type="button"><span>Is this an online poker website?</span><b>+</b></button><div hidden=""><p>No. This website covers physical pokerrooms and in-person tournaments only. It does not offer online poker, gaming accounts, deposits, balances or remote play.</p></div></article><article><button aria-expanded="false" type="button"><span>How do I register for a physical tournament?</span><b>+</b></button><div hidden=""><p>A request can be submitted only after a verified event and lawful venue process are connected. A request is not final until the venue confirms it.</p></div></article><article><button aria-expanded="false" type="button"><span>Can I participate through a broadcast?</span><b>+</b></button><div hidden=""><p>No. A broadcast can only show an authorised physical tournament. Viewers cannot join a table through the video player.</p></div></article><article><button aria-expanded="false" type="button"><span>What identification should I bring?</span><b>+</b></button><div hidden=""><p>Bring valid valid photo identification. The minimum legal age depends on the New Zealand law and the venue licence and the venue licence.</p></div></article><article><button aria-expanded="false" type="button"><span>When should I arrive?</span><b>+</b></button><div hidden=""><p>Use the confirmed arrival time shown on the event page. Unverified timings are never displayed.</p></div></article></div></section><section class="section responsible-callout"><div class="section-head"><p class="eyebrow">VISITOR INFORMATION</p><h2>Responsible participation</h2><p>Poker is paid entertainment, not a guaranteed source of income. Decide limits before arrival, avoid chasing losses and pause when the experience stops feeling comfortable.</p></div><div class="info-grid"><article class="info-card"><span class="card-index">01</span><h3>Set a time limit</h3><p>Choose a leaving time before entering the room.</p></article><article class="info-card"><span class="card-index">02</span><h3>Set a spending limit</h3><p>Use only money reserved for entertainment.</p></article><article class="info-card"><span class="card-index">03</span><h3>Take breaks</h3><p>Step away from the table and reassess regularly.</p></article><article class="info-card"><span class="card-index">04</span><h3>Seek support</h3><p>Local support services can provide confidential guidance.</p></article></div></section><section class="section newsletter"><div><p class="eyebrow">UPDATES</p><h2>Receive verified schedule updates</h2><p>Newsletters may cover physical events, schedule changes and authorised venue broadcasts. No winning claims or gaming offers.</p></div><form data-form="newsletter"><label>Email address<input autocomplete="email" name="email" required="" type="email"/></label><label class="check"><input required="" type="checkbox"/> I agree to the privacy notice.</label><button class="button primary" type="submit">Subscribe</button><p class="form-state" role="status"></p></form></section><section class="section quick-section"><div class="quick-grid"><a class="quick-card" href="visit.html"><img alt="" src="assets/icons/clock.svg"/><span><strong>Opening hours</strong><small>Shown only after venue verification</small></span></a><a class="quick-card" href="visit.html"><img alt="" src="assets/icons/route.svg"/><span><strong>Route</strong><small>Transport and accessible arrival planning</small></span></a><a class="quick-card" href="schedule.html"><img alt="" src="assets/icons/calendar.svg"/><span><strong>Tournament calendar</strong><small>Confirmed physical events only</small></span></a><a class="quick-card" href="pokerroom.html"><img alt="" src="assets/icons/table.svg"/><span><strong>Pokerroom</strong><small>Real tables in a physical venue</small></span></a><a class="quick-card" href="live.html"><img alt="" src="assets/icons/camera.svg"/><span><strong>Venue broadcast</strong><small>Coverage from an in-person tournament</small></span></a><a class="quick-card" href="rules.html"><img alt="" src="assets/icons/id.svg"/><span><strong>Visitor rules</strong><small>Identification and local age rules</small></span></a></div></section><section class="section split-intro"><div><picture><source media="(max-width: 700px)" srcset="assets/images/home-intro-800.webp"/><img alt="Physical pokerroom interior and visitor area" class="" decoding="async" height="1000" loading="lazy" src="assets/images/home-intro-1600.webp" width="1600"/></picture></div><div><p class="eyebrow">ABOUT THE GUIDE</p><h2>A clear route from arrival to the real table</h2><p>This guide organises practical information around physical attendance: venue access, tournament rules, table etiquette, lounge planning, authorised broadcasts and responsible participation.</p><p>It cannot be used to play poker or manage money. Venue-specific facts remain hidden until supplied and verified by the lawful operator.</p><a class="text-link" href="pokerroom.html">Explore the physical pokerroom →</a></div></section><section class="section verified-shell" data-verified-section="events" hidden=""><div class="section-head"><p class="eyebrow">VERIFIED EVENTS</p><h2>Upcoming physical tournaments</h2></div><div data-event-grid=""></div></section><section class="section"><div class="section-head"><p class="eyebrow">VISITOR INFORMATION</p><h2>Before taking a seat</h2><p>Physical participation depends on verified venue rules and applicable local requirements.</p></div><div class="info-grid"><article class="info-card"><span class="card-index">01</span><h3>Legal age</h3><p>The minimum age is determined by the New Zealand law and the venue licence and the venue licence.</p></article><article class="info-card"><span class="card-index">02</span><h3>Photo identification</h3><p>Bring valid valid photo identification.</p></article><article class="info-card"><span class="card-index">03</span><h3>Arrival window</h3><p>Use only the confirmed registration and arrival time shown for the event.</p></article><article class="info-card"><span class="card-index">04</span><h3>Seat confirmation</h3><p>A website request is not a final reservation until the venue confirms it.</p></article><article class="info-card"><span class="card-index">05</span><h3>Conduct</h3><p>Respect floor decisions, table etiquette, staff and other visitors.</p></article><article class="info-card"><span class="card-index">06</span><h3>Breaks and limits</h3><p>Set time and spending limits before attending and take regular breaks.</p></article></div></section></main>
+<footer class="site-footer">
+<div class="footer-brand"><img alt="Spin Casino" src="assets/logos/logo-dark.svg"/><p>A smoother independent route to physical pokerroom visits and venue broadcasts in New Zealand.</p></div>
+<div><h2>Plan</h2><a href="pokerroom.html">Pokerroom</a><a href="schedule.html">Schedule</a><a href="visit.html">Visit</a><a href="dining.html">Dining</a></div>
+<div><h2>Information</h2><a href="rules.html">Rules</a><a href="faq.html">FAQ</a><a href="responsible-gaming.html">Responsible play</a><a href="accessibility.html">Accessibility</a></div>
+<div><h2>Legal</h2><a href="privacy.html">Privacy</a><a href="cookies.html">Cookies</a><a href="terms.html">Terms</a><button class="footer-cookie-link" data-open-cookie="" type="button">Privacy choices</button></div>
+<div class="footer-bottom"><p>Local legal age and valid valid photo identification apply. Venue details remain hidden until verified.</p><p>© <span data-year=""></span> Spin Casino visitor guide.</p></div>
+</footer>
+<div aria-label="Privacy choices" aria-live="polite" class="cookie-banner" data-cookie-banner="" role="dialog">
+<div><strong>Your privacy choices</strong><p>Essential storage supports basic site functions. Optional analytics remain disabled unless you agree.</p></div>
+<div class="cookie-actions"><button class="button ghost" data-cookie-deny="" type="button">Reject optional</button><button class="button ghost" data-cookie-manage="" type="button">Manage choices</button><button class="button primary" data-cookie-accept="" type="button">Accept all</button></div>
+</div>
+<div aria-labelledby="cookie-title" aria-modal="true" class="cookie-modal" data-cookie-modal="" hidden="" role="dialog">
+<div class="modal-card"><button aria-label="Close" class="modal-close" data-cookie-close="" type="button">×</button><h2 id="cookie-title">Privacy preferences</h2><label class="switch-row"><span><strong>Essential storage</strong><small>Required for navigation and your cookie selection.</small></span><input checked="" disabled="" type="checkbox"/></label><label class="switch-row"><span><strong>Optional analytics</strong><small>No analytics script is loaded in this project.</small></span><input data-analytics-toggle="" type="checkbox"/></label><button class="button primary" data-cookie-save="" type="button">Save choices</button></div>
+</div>
+<button aria-label="Back to top" class="back-to-top" type="button">↑</button>
+</body></html>
